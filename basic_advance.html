@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Generátor JS snippetu → karta s Prism + line numbers</title>
+  <style>
+    :root { --bg:#0b0f17; --card:#121826; --muted:#a7b0c0; --fg:#e6edf7; --accent:#7aa2ff; --btn:#1a2440; --btnActive:#223257; }
+    html,body{height:100%}
+    body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,Arial}
+    .container{max-width:1100px;margin:0 auto;padding:24px}
+    h1{font-size:clamp(20px,3.8vw,32px);margin:0 0 16px}
+    p{color:var(--muted);margin:0 0 18px}
+    .grid{display:grid;grid-template-columns:1fr;gap:16px}
+    @media(min-width:1100px){.grid{grid-template-columns:1fr 1fr}}
+    .card{background:var(--card);border:1px solid #1b2436;border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.25);overflow:hidden}
+    .card h2{font-size:18px;margin:0;padding:14px 16px;border-bottom:1px solid #1b2436;background:#0e1422}
+    .section{padding:12px 12px 14px}
+    textarea{width:100%;min-height:180px;resize:vertical;background:#0b1220;color:var(--fg);border:1px solid #1b2436;border-radius:12px;padding:12px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+    .small{font-size:12px;color:#93a1b7}
+    button{cursor:pointer;background:var(--accent);color:#081020;border:0;border-radius:12px;padding:10px 14px;font-weight:600}
+    button.secondary{background:#19243a;color:var(--fg);border:1px solid #263552}
+    .controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    .out pre{margin:0; padding:12px; background:#06101f; color:#dfe7f6; border-radius:12px; overflow:auto; border:1px solid #1b2436;}
+    .monospace{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+    .preview-wrap{padding:12px}
+    .tag{display:inline-block;background:#152036;border:1px solid #2a3b5a;border-radius:999px;color:#b9c6e2;padding:4px 10px;font-size:12px}
+    .footer{color:#7f8daa;margin-top:16px}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>JS → karta s kódem (Prism + řádky) do jednoho <code>&lt;div&gt;</code></h1>
+    <p>Teď můžeš zadat <strong>dva</strong> texty: <em>Začátečník</em> a <em>Pokročilý</em>. Výsledný snippet vykreslí kartu s přepínačem (dvě „kostičky“ vedle sebe) a bude přepínat mezi dvěma okny kódu. Vše je izolováno v <strong>Shadow DOM</strong>.</p>
+
+    <div class="grid">
+      <div class="card">
+        <h2>Vstup – JavaScript (2 varianty)</h2>
+        <div class="section">
+          <label class="small" for="jsInBegin">Začátečník</label>
+          <textarea id="jsInBegin" placeholder="// Snadnější ukázka…
+function hello(){ console.log('Ahoj'); }
+hello();"></textarea>
+          <div style="height:10px"></div>
+          <label class="small" for="jsInAdv">Pokročilý</label>
+          <textarea id="jsInAdv" placeholder="// Pokročilejší ukázka…
+const fib=n=>n<2?n:fib(n-1)+fib(n-2);
+console.log(fib(10));"></textarea>
+          <div class="controls" style="margin-top:10px">
+            <button id="generateBtn">Vygenerovat snippet</button>
+            <button id="copyBtn" class="secondary">Zkopírovat snippet</button>
+            <span id="copyState" class="small"></span>
+          </div>
+          <p class="small" style="margin-top:8px">Prism se načítá z CDN (manual mód). Přepínač funguje bez reloadu a zvýraznění se provádí pro oba bloky při inicializaci.</p>
+        </div>
+      </div>
+
+      <div class="card out">
+        <h2>Výstup – kód ke vložení (1× &lt;div&gt; + &lt;script&gt;)</h2>
+        <div class="section">
+          <div class="tag monospace" id="idTag">id: —</div>
+          <pre id="outCode" class="monospace">// Stiskni „Vygenerovat snippet“</pre>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Náhled</h2>
+        <div class="preview-wrap">
+          <div id="previewHost" class="monospace small">Zatím prázdné…</div>
+        </div>
+      </div>
+    </div>
+
+    <p class="footer small">Externí knihovny: Prism CSS/JS + plugin Line Numbers z jsDelivr. Lze přidat témata a další jazyky.</p>
+  </div>
+
+<script>
+  function uid(){ return 'snippet-' + Math.random().toString(36).slice(2,10); }
+
+  // Bez-regex escapování a ochrana
+  function escTpl(str){
+    str = String(str);
+    str = str.split('\\').join('\\\\');             
+    str = str.split('`').join('\\`');           
+    str = str.split('</scr' + 'ipt>').join('<'+'/script>'); // ochrana 
+    return str;
+  }
+
+function buildSnippet({jsBegin, jsAdv, id, theme}){
+  // Bezpečný přenos obsahu (žádné `<` v inline <script>)
+  function toB64(s){
+    return btoa(unescape(encodeURIComponent(String(s))));
+  }
+  function themeHref(){
+    return theme === 'light'
+      ? 'https://cdn.jsdelivr.net/npm/prismjs@1/themes/prism.min.css'
+      : 'https://cdn.jsdelivr.net/npm/prismjs@1/themes/prism-tomorrow.min.css';
+  }
+
+  const b64Begin = JSON.stringify(toB64("\n" + jsBegin + "\n"));
+  const b64Adv   = JSON.stringify(toB64("\n" + jsAdv   + "\n"));
+
+  return (
+`<div id="${id}"></div>
+<script>(function(){
+  var host = document.getElementById('${id}');
+  if(!host){ console.error('Host element #${id} nenalezen'); return; }
+  var root = host.shadowRoot || host.attachShadow({mode:'open'});
+
+  // Dekodér Base64 až v runtime
+  function fromB64(b64){ return decodeURIComponent(escape(atob(b64))); }
+
+  var style = document.createElement('style');
+  style.textContent =
+    ".card{background:#111827;border:1px solid #1f2937;border-radius:12px;box-shadow:0 6px 20px rgba(0,0,0,.3);overflow:hidden}"+
+    ".head{display:flex;gap:8px;align-items:center;justify-content:space-between;font:600 14px/1.2 system-ui;background:#0b1220;color:#d1d5db;padding:10px 12px;border-bottom:1px solid #1f2937}"+
+    ".switch{display:flex;gap:8px;align-items:center}"+
+    ".btn{appearance:none;-webkit-appearance:none;cursor:pointer;border:1px solid #2a3754;background:#1a2440;color:#d7def0;padding:6px 10px;border-radius:10px;font:600 12px/1 system-ui}"+
+    ".btn[aria-pressed='true']{background:#223257;border-color:#334873;color:#fff}"+
+    ".copy{margin-left:8px}"+
+    "pre{margin:0}";
+  root.appendChild(style);
+
+  var card = document.createElement('div'); card.className='card';
+  var head = document.createElement('div'); head.className='head';
+  var title= document.createElement('div'); title.textContent='Kód (JavaScript)';
+  var sw   = document.createElement('div'); sw.className='switch';
+
+  var b1 = document.createElement('button'); b1.className='btn'; b1.type='button'; b1.textContent='Začátečník'; b1.setAttribute('aria-pressed','true');
+  var b2 = document.createElement('button'); b2.className='btn'; b2.type='button'; b2.textContent='Pokročilý';  b2.setAttribute('aria-pressed','false');
+  var copy = document.createElement('button'); copy.className='btn copy'; copy.type='button'; copy.textContent='📋 Kopírovat';
+  sw.append(b1,b2,copy);
+  head.append(title,sw);
+
+  var pre1 = document.createElement('pre'); pre1.className='line-numbers';
+  var code1= document.createElement('code'); code1.className='language-js';
+  code1.textContent = fromB64(${b64Begin});
+  pre1.appendChild(code1);
+
+  var pre2 = document.createElement('pre'); pre2.className='line-numbers'; pre2.style.display='none';
+  var code2= document.createElement('code'); code2.className='language-js';
+  code2.textContent = fromB64(${b64Adv});
+  pre2.appendChild(code2);
+
+  card.append(head,pre1,pre2);
+  root.appendChild(card);
+
+  var active = 1;
+  var code2Highlighted = false;
+
+  function show(i){
+    active = i;
+    if(i===1){
+      pre1.style.display='';  pre2.style.display='none';
+      b1.setAttribute('aria-pressed','true');  b2.setAttribute('aria-pressed','false');
+    } else {
+      pre1.style.display='none'; pre2.style.display='';
+      b1.setAttribute('aria-pressed','false'); b2.setAttribute('aria-pressed','true');
+      if (!code2Highlighted && window.Prism) { Prism.highlightElement(code2); code2Highlighted = true; }
+    }
+  }
+  b1.onclick=function(){show(1)};
+  b2.onclick=function(){show(2)};
+
+  copy.onclick=function(){
+    var txt = active===1 ? code1.textContent : code2.textContent;
+    navigator.clipboard.writeText(txt).catch(function(){});
+  };
+
+  function addShadowStyles(href){ var link=document.createElement('link'); link.rel='stylesheet'; link.href=href; root.appendChild(link); }
+  addShadowStyles('${themeHref()}');
+  addShadowStyles('https://cdn.jsdelivr.net/npm/prismjs@1/plugins/line-numbers/prism-line-numbers.css');
+
+  function load(src){return new Promise(function(res,rej){var s=document.createElement('script'); s.src=src; s.onload=res; s.onerror=rej; document.head.appendChild(s);});}
+  (function(){ var s=document.createElement('script'); s.text = 'window.Prism=window.Prism||{};Prism.manual=true;'; document.head.appendChild(s); })();
+
+  load('https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-core.min.js')
+    .then(function(){ return load('https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-clike.min.js'); })
+    .then(function(){ return load('https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-javascript.min.js'); })
+    .then(function(){ return load('https://cdn.jsdelivr.net/npm/prismjs@1/plugins/line-numbers/prism-line-numbers.min.js'); })
+    .then(function(){ if(window.Prism){ Prism.highlightElement(code1); } })
+    .catch(function(e){ console.error('Nepodařilo se načíst Prism:', e); });
+})();` + '<' + '/script>'
+  );
+}
+
+function renderPreview(beginText, advText){
+  const host = document.getElementById('previewHost');
+  host.textContent='';
+  const root = host.attachShadow ? (host.shadowRoot || host.attachShadow({mode:'open'})) : host;
+  while(root.firstChild) root.removeChild(root.firstChild);
+
+  const style = document.createElement('style');
+  style.textContent =
+    '.card{background:#111827;border:1px solid #1f2937;border-radius:12px;overflow:hidden}'
+   +'.head{display:flex;gap:8px;align-items:center;justify-content:space-between;font:600 14px system-ui;background:#0b1220;color:#d1d5db;padding:10px 12px;border-bottom:1px solid #1f2937}'
+   +'.switch{display:flex;gap:8px;align-items:center}'
+   +'.btn{border:1px solid #2a3754;background:#1a2440;color:#d7def0;padding:6px 10px;border-radius:10px;font:600 12px/1 system-ui}'
+   +'.btn.active{background:#223257;border-color:#334873}'
+   +'.copy{margin-left:8px}'
+   +'pre{margin:0;padding:12px;color:#e5e7eb;white-space:pre;overflow:auto;max-height:300px;}';
+  root.appendChild(style);
+
+  const card = document.createElement('div'); card.className='card';
+  const head = document.createElement('div'); head.className='head';
+  const title= document.createElement('div'); title.textContent='Kód (náhled)';
+
+  const sw   = document.createElement('div'); sw.className='switch';
+  const b1   = document.createElement('button'); b1.className='btn active'; b1.textContent='Začátečník';
+  const b2   = document.createElement('button'); b2.className='btn';         b2.textContent='Pokročilý';
+  const copy = document.createElement('button'); copy.className='btn copy';   copy.textContent='📋 Kopírovat';
+  sw.append(b1,b2,copy);
+  head.append(title,sw);
+
+  const pre1 = document.createElement('pre'); pre1.textContent = beginText;
+  const pre2 = document.createElement('pre'); pre2.textContent = advText; pre2.style.display='none';
+
+  card.append(head,pre1,pre2);
+  root.appendChild(card);
+
+  let active = 1;
+  function show(i){
+    active = i;
+    if(i===1){
+      pre1.style.display='';  pre2.style.display='none';
+      b1.classList.add('active');  b2.classList.remove('active');
+    }else{
+      pre1.style.display='none'; pre2.style.display='';
+      b1.classList.remove('active'); b2.classList.add('active');
+    }
+  }
+  b1.onclick=()=>show(1);
+  b2.onclick=()=>show(2);
+
+  copy.onclick=()=>{
+    const txt = active===1 ? pre1.textContent : pre2.textContent;
+    navigator.clipboard.writeText(txt).catch(()=>{});
+  };
+}
+
+
+  // UI
+  const jsInBegin = document.getElementById('jsInBegin');
+  const jsInAdv   = document.getElementById('jsInAdv');
+  const out  = document.getElementById('outCode');
+  const idTag= document.getElementById('idTag');
+  let currentId = uid();
+  idTag.textContent = 'id: #' + currentId;
+
+  document.getElementById('generateBtn').addEventListener('click', ()=>{
+    const jsBegin = jsInBegin.value.trim();
+    const jsAdv   = jsInAdv.value.trim();
+    const code = buildSnippet({jsBegin, jsAdv, id: currentId});
+    out.textContent = code;
+    renderPreview(jsBegin, jsAdv);
+    currentId = uid();
+    idTag.textContent = 'id: #' + currentId;
+    document.getElementById('copyState').textContent = '';
+  });
+
+  document.getElementById('copyBtn').addEventListener('click', async ()=>{
+    try{ await navigator.clipboard.writeText(out.textContent); document.getElementById('copyState').textContent = 'Zkopírováno ✅'; }
+    catch(e){ document.getElementById('copyState').textContent = 'Kopírování selhalo'; }
+  });
+
+  // Demo defaulty
+  jsInBegin.value = `function hello(){
+  console.log('Ahoj');
+}
+hello();`;
+  jsInAdv.value   = `const fib=n=>n<2?n:fib(n-1)+fib(n-2);
+console.log(fib(10));`;
+</script>
+
+</body>
+</html>

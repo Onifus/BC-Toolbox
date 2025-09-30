@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Single Snippet – Generator (Prism + Shadow DOM)</title>
+  <style>
+  :root{
+    --bg:#0e152b; --panel:#1c2238; --border:#2c3550; --text:#e9ecf6; --muted:#9aa3c7; --accent:#7aa2ff;
+    --radius:16px; --pad:16px; --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0; font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto; color:var(--text); background:linear-gradient(180deg,#0e152b,#0f182f)}
+  .wrap{max-width:1200px; margin:auto; padding:40px 24px 92px}
+  h1{font-weight:800; font-size:clamp(24px,4vw,36px); margin:0 0 12px}
+  p{color:var(--muted); margin:0 0 18px}
+
+  /* LAYOUT */
+  .row{display:grid; gap:18px; grid-template-columns:minmax(0,1fr) minmax(0,1fr); align-items:start}
+  .col{display:flex; flex-direction:column; gap:12px; min-width:0}
+
+  /* FORM */
+  label{font-weight:600}
+  textarea{width:100%; min-height:260px; border:1px solid var(--border); border-radius:var(--radius); background:#121831; color:var(--text); font:500 14px/1.55 var(--mono); padding:14px; resize:vertical}
+  select{background:#121831; color:var(--text); border:1px solid var(--border); border-radius:12px; padding:10px 12px; font-weight:600}
+  button{appearance:none; border:none; background:var(--accent); color:#0b1020; font-weight:800; padding:10px 16px; border-radius:12px; cursor:pointer; box-shadow:0 4px 14px rgba(122,162,255,.25); transition:transform .08s ease, background .2s ease}
+  button:active{transform:translateY(1px)}
+  .muted{color:var(--muted); font-size:13px}
+
+  /* CODE BOX */
+  .codebox{background:rgba(28,34,56,.96); border:1px solid var(--border); border-radius:20px; overflow:hidden; box-shadow:0 12px 28px rgba(0,0,0,.35)}
+  .code-head{display:flex; gap:8px; align-items:center; padding:10px; background:linear-gradient(180deg,rgba(255,255,255,.03),rgba(0,0,0,.12)); border-bottom:1px solid var(--border)}
+  .copy-btn{appearance:none; border:1px solid var(--border); background:#121831; color:var(--muted); padding:8px 12px; border-radius:12px; font:600 12px/1 var(--mono); cursor:pointer}
+  .copy-btn.copied{color:#0b1020; background:#8be28b; border-color:#8be28b}
+
+  /* PRE/ CODE: prevent overlap by allowing shrink + scroll */
+  pre{margin:0; padding:var(--pad); font:500 14px/1.6 var(--mono); color:var(--text); background:transparent; overflow:auto; max-width:100%}
+  code{white-space:pre; word-break:normal}
+
+  /* PREVIEW heights so long code scrolls instead of pushing layout */
+  #embedOut, #preview{max-height:56vh}
+  .preview{background:#121831; border:1px dashed var(--border); border-radius:var(--radius); padding:14px}
+
+  @media (max-width:980px){ .row{grid-template-columns:1fr} #embedOut, #preview{max-height:44vh} }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Single Snippet – Generator</h1>
+    <p>Vlož kód do pole vlevo, zvol jazyk (kvůli Prism zvýraznění) a klikni na <b>Vygenerovat snippet</b>. Vpravo dostaneš <b>embed</b> (DIV+SCRIPT), který vložíš do libovolné stránky. Snippet se vykreslí v <b>Shadow DOM</b>, s <b>Prism</b> zvýrazněním a <b>číslováním řádků</b>.</p>
+
+    <div class="row">
+      <div class="col">
+        <label for="codeInput">Vstupní kód</label>
+        <textarea id="codeInput" placeholder="// Vlož sem libovolný kód…"></textarea>
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap">
+          <label for="lang">Jazyk:</label>
+          <select id="lang">
+            <option value="javascript" selected>JavaScript</option>
+            <option value="markup">HTML</option>
+            <option value="css">CSS</option>
+            <option value="bash">Bash</option>
+            <option value="python">Python</option>
+            <option value="none">Bez zvýraznění</option>
+          </select>
+          <button id="gen">Vygenerovat snippet</button>
+        </div>
+      </div>
+
+      <div class="col">
+        <div class="codebox">
+          <div class="code-head">
+            <span class="muted">Výstup – kód ke vložení</span>
+            <div style="flex:1"></div>
+            <button class="copy-btn" id="copyOut">Zkopírovat snippet</button>
+          </div>
+          <pre id="embedOut"><code></code></pre>
+        </div>
+        <div style="height:10px"></div>
+        <div class="codebox">
+          <div class="code-head">
+            <span class="muted">Náhled (lokální render, bez Prism)</span>
+            <div style="flex:1"></div>
+            <button class="copy-btn" id="copyIn">Zkopírovat vstup</button>
+          </div>
+          <div class="preview">
+            <pre id="preview"><code></code></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+(function(){
+  const codeInput = document.getElementById('codeInput');
+  const langSel   = document.getElementById('lang');
+  const genBtn    = document.getElementById('gen');
+  const outCode   = document.querySelector('#embedOut code');
+  const previewEl = document.querySelector('#preview code');
+  const copyOut   = document.getElementById('copyOut');
+  const copyIn    = document.getElementById('copyIn');
+
+  function uid(){ return Math.random().toString(36).slice(2,10); }
+
+  function escapeHTML(s){ return s.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;'); }
+
+  function makeEmbed(codeStr, lang){
+    const id = 'snippet-' + uid();
+    // Use JSON string to safely embed arbitrary code (handles \n, \\ , quotes, backticks etc.)
+    const codeJSON = JSON.stringify(codeStr)
+	  .replace(/</g, '\\u003C')
+	  .replace(/\u2028/g, '\\u2028')
+	  .replace(/\u2029/g, '\\u2029');
+
+    const prismLang = (lang === 'none') ? '' : ('language-' + lang);
+
+    const embed = `\n<div id="${id}"></div>\n<script>(function(){\n  const host = document.getElementById('${id}');\n  if(!host) return;\n  const root = host.attachShadow({mode:'open'});\n  const source = ${codeJSON};\n  const lang = ${JSON.stringify(lang)};\n\n  // Basic chrome\n  const wrapper = document.createElement('div');\n  wrapper.innerHTML = \`
+    <style>
+      :host{all:initial}
+      .codebox{background:#171a2b;border:1px solid #2a2f47;border-radius:14px;overflow:hidden;box-shadow:0 10px 30px rgba(0,0,0,.35);font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, \'Courier New\', monospace;color:#e8eaf6}
+      .head{display:flex;gap:8px;align-items:center;padding:8px;background:linear-gradient(180deg,rgba(255,255,255,.02),rgba(0,0,0,.15));border-bottom:1px solid #2a2f47}
+      .muted{color:#9aa3c7;font-size:12px}
+      .copy{appearance:none;border:1px solid #2a2f47;background:#101426;color:#9aa3c7;padding:6px 10px;border-radius:10px;font:600 12px/1 ui-monospace;cursor:pointer}
+      pre{margin:0;padding:14px;overflow:auto}
+    </style>
+    <div class=\"codebox\">\n      <div class=\"head\"><span class=\"muted\">Snippet</span><div style=\"flex:1\"></div><button class=\"copy\">Kopírovat</button></div>\n      <pre class=\"line-numbers\"><code class=\"${prismLang}\"></code></pre>\n    </div>\n  \`;
+  root.appendChild(wrapper);
+\n  const codeEl = wrapper.querySelector('code');
+  codeEl.textContent = source; // raw text; Prism will highlight
+\n  // Load Prism assets inside Shadow DOM
+  const cssUrls = [
+    'https://cdn.jsdelivr.net/npm/prismjs/themes/prism-okaidia.min.css',
+    'https://cdn.jsdelivr.net/npm/prismjs/plugins/line-numbers/prism-line-numbers.min.css'
+  ];
+  const jsUrls = [
+    'https://cdn.jsdelivr.net/npm/prismjs/prism.min.js',
+    // load selected language only (markup covers HTML)
+    (lang==='none' ? null : (lang==='markup' ? 'https://cdn.jsdelivr.net/npm/prismjs/components/prism-markup.min.js'
+                       : 'https://cdn.jsdelivr.net/npm/prismjs/components/prism-' + lang + '.min.js')),
+    'https://cdn.jsdelivr.net/npm/prismjs/plugins/line-numbers/prism-line-numbers.min.js'
+  ].filter(Boolean);
+\n  function loadCSS(url){ return new Promise(r=>{ const link=document.createElement('link'); link.rel='stylesheet'; link.href=url; link.onload=r; root.appendChild(link); }); }
+  function loadJS(url){ return new Promise(r=>{ const s=document.createElement('script'); s.src=url; s.onload=r; root.appendChild(s); }); }
+\n  (async function(){
+    for(const u of cssUrls){ await loadCSS(u); }
+    for(const u of jsUrls){ await loadJS(u); }
+    if(window.Prism){ window.Prism.highlightElement(codeEl); }
+  })();
+\n  // Copy button
+  const copyBtn = wrapper.querySelector('.copy');
+  copyBtn.addEventListener('click', async ()=>{
+    try{ await navigator.clipboard.writeText(source); copyBtn.textContent='Zkopírováno'; setTimeout(()=>copyBtn.textContent='Kopírovat',1200); }
+    catch{
+      const ta = document.createElement('textarea'); ta.value = source; host.appendChild(ta); ta.select(); try{ document.execCommand('copy'); copyBtn.textContent='Zkopírováno'; setTimeout(()=>copyBtn.textContent='Kopírovat',1200);} finally{ host.removeChild(ta); }
+    }
+  });
+})();<\/script>`;
+
+    return { id, embed };
+  }
+
+  function updatePreview(text){
+    previewEl.textContent = text;
+  }
+
+  genBtn.addEventListener('click', ()=>{
+    const code = codeInput.value.replace(/\r/g,'');
+    const lang = langSel.value;
+
+    // Fill preview (plain text)
+    updatePreview(code);
+
+    // Build embed and display
+    const { embed } = makeEmbed(code, lang);
+    outCode.innerText = embed; // show as text for easy copy
+  });
+
+  // Copy buttons
+  function markCopied(btn){ const old=btn.textContent; btn.textContent='Zkopírováno'; btn.classList.add('copied'); setTimeout(()=>{ btn.textContent=old; btn.classList.remove('copied'); }, 1400); }
+
+  document.getElementById('copyOut').addEventListener('click', async ()=>{
+    const txt = outCode.innerText;
+    try{ await navigator.clipboard.writeText(txt); markCopied(document.getElementById('copyOut')); }
+    catch{ const ta=document.createElement('textarea'); ta.value=txt; document.body.appendChild(ta); ta.select(); try{ document.execCommand('copy'); markCopied(document.getElementById('copyOut')); } finally{ document.body.removeChild(ta); } }
+  });
+  document.getElementById('copyIn').addEventListener('click', async ()=>{
+    const txt = codeInput.value;
+    try{ await navigator.clipboard.writeText(txt); markCopied(document.getElementById('copyIn')); }
+    catch{ const ta=document.createElement('textarea'); ta.value=txt; document.body.appendChild(ta); ta.select(); try{ document.execCommand('copy'); markCopied(document.getElementById('copyIn')); } finally{ document.body.removeChild(ta); } }
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,453 @@
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Moodle Snippet Generator</title>
+  <style>
+    :root{--bg:#0b1020;--card:#11192e;--muted:#8ea0b6;--accent:#7c9cff;--ok:#10b981;--warn:#f59e0b;--err:#ef4444}
+    html,body{height:100%}
+    body{margin:0;background:linear-gradient(180deg,#0b1020,#0b1226);color:#e6eef7;font:14px/1.5 system-ui,Segoe UI,Roboto,Arial}
+    .wrap{max-width:1100px;margin:24px auto;padding:0 16px}
+    h1{font-size:22px;margin:0 0 12px}
+    .grid{display:grid;gap:12px;grid-template-columns:1fr}
+    @media(min-width:960px){.grid{grid-template-columns:1.2fr .8fr}}
+    .card{background:var(--card);border:1px solid #1c2947;border-radius:14px;box-shadow:0 10px 30px #0003}
+    .card .hd{padding:12px 14px;border-bottom:1px solid #1c2947;font-weight:600}
+    .card .bd{padding:12px 14px}
+    textarea,input,button,select{font:inherit}
+    textarea{width:100%;min-height:220px;resize:vertical;border-radius:10px;border:1px solid #24324f;background:#0e152b;color:#e6eef7;padding:10px}
+    input[type="text"], input[type="url"]{width:100%;border:1px solid #24324f;background:#0e152b;color:#e6eef7;padding:8px;border-radius:10px}
+    .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .row > *{flex:1}
+    .btn{appearance:none;border:1px solid #2a3a63;background:#16203d;color:#e6eef7;padding:8px 12px;border-radius:10px;cursor:pointer}
+    .btn:hover{filter:brightness(1.08)}
+    .btn.pri{background:var(--accent);color:#0b1020;border-color:var(--accent);font-weight:600}
+    .btn.ok{background:var(--ok);color:#06121a;border-color:var(--ok)}
+    .btn.warn{background:var(--warn);color:#2b1700;border-color:var(--warn)}
+    .btn.ghost{background:transparent}
+    .muted{color:var(--muted)}
+    .cols{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    .tbl{width:100%;border-collapse:collapse}
+    .tbl th,.tbl td{padding:8px;border-bottom:1px solid #223258}
+    .tbl th{color:#bcd0ea;text-align:left}
+    code.block{display:block;white-space:pre;overflow:auto;background:#0e152b;border:1px solid #24324f;border-radius:10px;padding:10px}
+    .tag{display:inline-flex;gap:6px;align-items:center;background:#24324f;border:1px solid #2a3a63;color:#cfe1ff;border-radius:999px;padding:5px 10px;margin:3px}
+    .tag a{color:#b7ffcf;text-decoration:none}
+    .preview{background:#0e152b;border:1px solid #24324f;border-radius:10px;padding:10px;overflow:auto}
+    .preview .hl{background:#fde68a;color:#1a1a1a;border-radius:6px;padding:0 3px;cursor:pointer}
+    .mini{font-size:12px}
+  </style>
+  <link rel="stylesheet" href="https://unpkg.com/prismjs@1.29.0/themes/prism-okaidia.min.css">
+<script src="https://unpkg.com/prismjs@1.29.0/components/prism-core.min.js"></script>
+<script src="https://unpkg.com/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+<script>
+  // autodetekce jazyků do náhledu
+  window.Prism = window.Prism || {};
+  Prism.plugins.autoloader.languages_path = 'https://unpkg.com/prismjs@1.29.0/components/';
+</script>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Moodle Snippet Generator</h1>
+    <p class="muted">Nahraj/pasteuj kód, klikni na klíčová slova v náhledu, zadej URL kapitoly Moodlu a vygeneruj vložitelný snippet (bez <code>&lt;head&gt;</code>/<code>&lt;body&gt;</code>).</p>
+
+    <div class="grid">
+      <section class="card">
+        <div class="hd">1) Vstupní kód</div>
+        <div class="bd">
+          <div class="row">
+            <input type="file" id="fileInput" accept=".js,.ts,.jsx,.tsx,.py,.java,.cs,.cpp,.c,.txt,.md,.html" />
+            <button class="btn" id="loadExample">Načíst ukázku</button>
+          </div>
+          <textarea id="codeIn" placeholder="Vlož sem kód…"></textarea>
+          <div class="row">
+            <label style="flex:0 0 auto"><input type="checkbox" id="wholeWord" checked> Pouze celá slova</label>
+            <label style="flex:0 0 auto"><input type="checkbox" id="openNew" checked> Otevírat v nové záložce</label>
+            <span class="muted mini">Tip: tokeny se generují automaticky, ale můžeš je vytvářet i klikem v náhledu.</span>
+			<div class="row">
+			  <label style="flex:0 0 auto">
+				<input type="checkbox" id="usePrism" checked>
+				Použít Prism (zvýraznění)
+			  </label>
+
+			  <label style="flex:0 0 auto">
+				Jazyk:
+				<select id="langSelect">
+				  <option value="javascript" selected>JavaScript</option>
+				  <option value="typescript">TypeScript</option>
+				  <option value="python">Python</option>
+				  <option value="java">Java</option>
+				  <option value="c">C</option>
+				  <option value="cpp">C++</option>
+				  <option value="csharp">C#</option>
+				  <option value="markup">HTML/Markup</option>
+				</select>
+			  </label>
+			</div>
+
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="hd">2) Mapování → kapitoly Moodlu</div>
+        <div class="bd">
+          <div class="row">
+            <input type="text" id="tokenInput" placeholder="např. function"/>
+            <input type="url" id="urlInput" placeholder="https://moodle.tvoje.sk/kurz/kapitola/funkce"/>
+            <button class="btn ok" id="addMap">Přidat</button>
+            <button class="btn warn" id="clearMap">Vyčistit</button>
+          </div>
+          <table class="tbl" id="mapTable">
+            <thead><tr><th>Token</th><th>URL</th><th style="width:1%"></th></tr></thead>
+            <tbody></tbody>
+          </table>
+          <div class="row" style="margin-top:8px">
+            <button class="btn" id="exportCfg">Export konfigurace (JSON)</button>
+            <button class="btn" id="importCfg">Import konfigurace (JSON)</button>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <section class="card" style="margin-top:12px">
+      <div class="hd">3) Náhled klikacích částí</div>
+      <div class="bd">
+        <div id="preview" class="preview" aria-live="polite"></div>
+        <p class="muted mini">Kliknutím na slovo v náhledu jej přidáš do mapování (nebo upravíš URL).</p>
+      </div>
+    </section>
+
+    <section class="card" style="margin-top:12px">
+      <div class="hd">4) Vygenerovat Moodle snippet</div>
+      <div class="bd">
+        <div class="row">
+          <input type="text" id="targetSelector" value="#codeWidget1" />
+          <button class="btn pri" id="genSnippet">Vygenerovat snippet</button>
+          <button class="btn" id="copySnippet">Zkopírovat</button>
+          <button class="btn" id="downloadSnippet">Stáhnout .html</button>
+        </div>
+        <p class="muted mini">Tento snippet vlož přímo do HTML bloku v Moodlu. <strong>Neobsahuje</strong> hlavičku ani body.</p>
+        <textarea id="snippetOut" readonly style="min-height:160px"></textarea>
+      </div>
+    </section>
+
+    <section class="card" style="margin-top:12px">
+      <div class="hd">Aktuální pravidla</div>
+      <div class="bd" id="rules"></div>
+    </section>
+  </div>
+
+  <script>
+    // --- UTIL ---
+    const $ = sel => document.querySelector(sel);
+    const $$ = sel => Array.from(document.querySelectorAll(sel));
+    const escapeHtml = s => String(s||'').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[ch]));
+    const escReg = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    const state = {
+      code: '',
+      links: [], // {match, url}
+      wholeWord: true,
+      openInNewTab: true,
+    };
+
+    // Loaders
+    $('#fileInput').addEventListener('change', e => {
+      const f = e.target.files?.[0];
+      if (!f) return;
+      const r = new FileReader();
+      r.onload = () => { $('#codeIn').value = String(r.result); handleCodeInput(); };
+      r.readAsText(f);
+    });
+
+    $('#loadExample').addEventListener('click', () => {
+      const demo = `function secti(a, b) {\n  return a + b;\n}\n\nconst vysledek = secti(2, 3);\nconsole.log('Výsledek:', vysledek);`;
+      $('#codeIn').value = demo;
+      handleCodeInput();
+      quickAdd('function', 'https://moodle.example.edu/js/functions');
+      quickAdd('return', 'https://moodle.example.edu/js/return');
+      quickAdd('secti', 'https://moodle.example.edu/priklady/secti');
+    });
+
+    $('#codeIn').addEventListener('input', handleCodeInput);
+    function handleCodeInput(){
+      state.code = $('#codeIn').value;
+      renderPreview();
+      renderRules();
+    }
+
+    $('#wholeWord').addEventListener('change', e => { state.wholeWord = e.target.checked; renderPreview(); renderRules(); });
+    $('#openNew').addEventListener('change', e => { state.openInNewTab = e.target.checked; renderRules(); });
+
+    // Mapování: přidat/odebrat
+    $('#addMap').addEventListener('click', () => {
+      const token = $('#tokenInput').value.trim();
+      const url = $('#urlInput').value.trim();
+      if (!token || !url) return alert('Doplň token i URL.');
+      upsertMap(token, url);
+      $('#tokenInput').value = '';
+      $('#urlInput').value = '';
+    });
+
+    $('#clearMap').addEventListener('click', () => {
+      if (!confirm('Odebrat všechna mapování?')) return;
+      state.links = [];
+      renderMap();
+      renderPreview();
+      renderRules();
+    });
+
+    $('#exportCfg').addEventListener('click', () => {
+      const data = JSON.stringify({ code: state.code, links: state.links, wholeWord: state.wholeWord, openInNewTab: state.openInNewTab }, null, 2);
+      downloadText('moodle-widget-config.json', data);
+    });
+
+    $('#importCfg').addEventListener('click', async () => {
+      const [fileHandle] = await window.showOpenFilePicker?.({types:[{description:'JSON',accept:{'application/json':['.json']}}]})?.catch(()=>[]) || [];
+      if (!fileHandle) return;
+      const file = await fileHandle.getFile();
+      const text = await file.text();
+      try {
+        const obj = JSON.parse(text);
+        state.code = obj.code||''; $('#codeIn').value = state.code;
+        state.links = Array.isArray(obj.links) ? obj.links : [];
+        state.wholeWord = !!obj.wholeWord; $('#wholeWord').checked = state.wholeWord;
+        state.openInNewTab = !!obj.openInNewTab; $('#openNew').checked = state.openInNewTab;
+        renderMap(); renderPreview(); renderRules();
+      } catch(e){ alert('Soubor není platný JSON.'); }
+    });
+
+    function upsertMap(token, url){
+      const i = state.links.findIndex(x => x.match === token);
+      if (i >= 0) state.links[i].url = url; else state.links.push({ match: token, url });
+      state.links.sort((a,b)=> b.match.length - a.match.length);
+      renderMap();
+      renderPreview();
+      renderRules();
+    }
+
+    function removeMap(token){
+      state.links = state.links.filter(x => x.match !== token);
+      renderMap(); renderPreview(); renderRules();
+    }
+
+    function renderMap(){
+      const tbody = $('#mapTable tbody');
+      tbody.innerHTML = '';
+      state.links.forEach(({match, url}) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td><code>${escapeHtml(match)}</code></td><td><a class="muted" href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(url)}</a></td><td><button class="btn ghost" data-del="${escapeHtml(match)}">×</button></td>`;
+        tbody.appendChild(tr);
+      });
+      tbody.querySelectorAll('[data-del]').forEach(btn => btn.addEventListener('click', e => removeMap(e.currentTarget.getAttribute('data-del'))));
+    }
+
+    function renderPreview(){
+      const host = $('#preview');
+      host.innerHTML = '';
+      const pre = document.createElement('pre');
+      const code = document.createElement('code');
+      pre.style.margin=0; pre.style.whiteSpace='pre-wrap'; pre.style.wordBreak='break-word';
+      const markers = (state.links||[]).map(x=>({
+        re: new RegExp((state.wholeWord ? `\\b${escReg(x.match)}\\b` : escReg(x.match)), 'g'),
+        label: x.match,
+        url: x.url
+      })).sort((a,b)=> b.label.length - a.label.length);
+      let html = escapeHtml(state.code||'');
+      markers.forEach((m,idx)=>{ html = html.replace(m.re, `__HL_${idx}__`); });
+      markers.forEach((m,idx)=>{ const span = `<span class="hl" data-token="${escapeHtml(m.label)}" title="${escapeHtml(m.url)}">${escapeHtml(m.label)}</span>`; html = html.split(`__HL_${idx}__`).join(span); });
+      code.innerHTML = html || '<span class="muted">(Sem přijde náhled kódu…)</span>';
+      pre.appendChild(code); host.appendChild(pre);
+    }
+
+    $('#preview').addEventListener('click', e => {
+      const t = e.target.closest('.hl');
+      if (t) {
+        // Klik na již zvýrazněný token → upravit/odebrat URL
+        const tok = t.getAttribute('data-token');
+        const cur = state.links.find(x=>x.match===tok)?.url||'';
+        const url = prompt(`Upravit URL pro „${tok}“:`, cur);
+        if (url === null) return;
+        if (url === '') removeMap(tok); else upsertMap(tok, url.trim());
+        return;
+      }
+      // Jednoduchý klik na libovolné slovo → najdi slovo pod kurzorem a nabídni přidání
+      const pos = getCaretAtClick(e);
+      if (!pos || !pos.node || pos.node.nodeType !== Node.TEXT_NODE) return;
+      const text = pos.node.textContent || '';
+      const idx = pos.offset;
+      const isWordChar = ch => /[A-Za-zÀ-ſ0-9_]/.test(ch);
+      let L = idx, R = idx;
+      while (L > 0 && isWordChar(text[L-1])) L--;
+      while (R < text.length && isWordChar(text[R])) R++;
+      const token = text.slice(L, R).trim();
+      if (!token) return;
+      const curUrl = state.links.find(x=>x.match===token)?.url || '';
+      const url = prompt(`Zadej URL pro „${token}“:`, curUrl);
+      if (url === null) return;
+      if (url === '') removeMap(token); else upsertMap(token, url.trim());
+    });
+
+    // Získání caret pozice pro klik (podpora Chrome/Edge i Firefox)
+    function getCaretAtClick(e){
+      let range, node, offset;
+      if (document.caretRangeFromPoint) {
+        range = document.caretRangeFromPoint(e.clientX, e.clientY);
+        if (!range) return null;
+        node = range.startContainer; offset = range.startOffset;
+      } else if (document.caretPositionFromPoint) {
+        const pos = document.caretPositionFromPoint(e.clientX, e.clientY);
+        if (!pos) return null;
+        node = pos.offsetNode; offset = pos.offset;
+      } else return null;
+      return { node, offset };
+    }
+
+    function renderRules(){
+      const r = $('#rules');
+      r.innerHTML = '';
+      const chips = [];
+      if (state.wholeWord) chips.push(`<span class="tag">Režim: <strong>celá slova</strong></span>`); else chips.push(`<span class="tag">Režim: <strong>podřetězce</strong></span>`);
+      chips.push(`<span class="tag">Otevírání: <strong>${state.openInNewTab ? 'nová záložka' : 'stejné okno'}</strong></span>`);
+      if (state.links.length) chips.push(`<span class="tag">Položek: <strong>${state.links.length}</strong></span>`);
+      r.innerHTML = chips.join(' ');
+    }
+
+    function downloadText(filename, text){
+      const blob = new Blob([text], {type:'text/plain'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = filename; a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function quickAdd(t,u){ upsertMap(t,u); }
+
+    // --- GENEROVÁNÍ SNIPPETU (bez head/body) ---
+    // --- GENEROVÁNÍ SNIPPETU (bez head/body) ---
+function getSnippet(cfg){
+  const safeCfg = JSON.stringify(cfg).replace(/</g,'\\u003C');
+  const divId = (cfg.target || '#codeWidget1').replace(/^#/, '');
+
+  // Jádro snippetu: bez template stringů uvnitř výsledku, ale tady ho
+  // klidně použijeme pro čitelnost. Ve výstupu už backticky nejsou.
+  const CORE = `(function(C){
+var d=document;var host=d.querySelector(C.target);if(!host)return;
+var root=host.attachShadow?host.attachShadow({mode:'open'}):host;
+function escHtml(s){return String(s).replace(/[&<>\\"']/g,function(ch){return {'&':'&amp;','<':'&lt;','>':'&gt;','\\"':'&quot;','\\'':'&#39;'}[ch];});}
+function escReg(s){return s.replace(/[.*+?^\${}()|[\\]\\\\]/g,'\\\\$&');}
+var style=d.createElement('style');style.textContent=
+".ccode{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,'Liberation Mono','Courier New',monospace;}"
++".ccode pre{margin:0;padding:12px;background:#0f172a0d;border:1px solid #e5e7eb;border-radius:10px;overflow:auto;}"
++".ccode code{font-size:14px;line-height:1.5;white-space:pre;}"
++".ccode .hl{background:#fde68a;border-radius:6px;padding:0 3px;cursor:pointer;transition:filter .15s ease;}"
++".ccode .hl:hover{filter:brightness(.94);}"
++".overlay{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;z-index:2147483647;}"
++'.overlay[aria-hidden="false"]{display:flex;}'
++".dialog{background:#fff;width:min(520px,92vw);border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,.15);border:1px solid #e5e7eb;}"
++".dialog header{padding:14px 16px;font-weight:600;border-bottom:1px solid #f1f5f9;}"
++".dialog .content{padding:16px;color:#111827;}"
++".dialog .actions{display:flex;gap:8px;justify-content:flex-end;padding:12px 16px;border-top:1px solid #f1f5f9;}"
++".btn{appearance:none;border:1px solid #e5e7eb;background:#f8fafc;padding:8px 12px;border-radius:10px;cursor:pointer;}"
++".btn.primary{background:#111827;color:#fff;border-color:#111827;}";
+var wrap=d.createElement('div');wrap.className='ccode';
+var pre=d.createElement('pre');var code=d.createElement('code');pre.appendChild(code);wrap.appendChild(pre);
+var overlay=d.createElement('div');overlay.className='overlay';overlay.setAttribute('aria-hidden','true');
+overlay.innerHTML='<div class="dialog" role="dialog" aria-modal="true"><header></header><div class="content"></div><div class="actions"><button class="btn" data-act="no"></button><button class="btn primary" data-act="yes"></button></div></div>';
+root.appendChild(style);root.appendChild(wrap);root.appendChild(overlay);
+var T=C.i18n||{};var I={title:T.title||'Chceš se o tom dozvědět víc?',desc:T.desc||'Klikl/a jsi na zvýrazněnou část kódu. Můžu tě přesměrovat na související kapitolu v Moodlu.',yes:T.yes||'Ano, přejít',no:T.no||'Ne, zůstat'};
+overlay.querySelector('header').textContent=I.title;overlay.querySelector('.content').textContent=I.desc;overlay.querySelector('[data-act="yes"]').textContent=I.yes;overlay.querySelector('[data-act="no"]').textContent=I.no;
+var items=(C.links||[]).map(function(x){var pat=(C.wholeWord!==false)?('\\\\b'+escReg(x.match)+'\\\\b'):escReg(x.match);return {re:new RegExp(pat,'g'),url:x.url,label:x.match};}).sort(function(a,b){return b.label.length-a.label.length;});
+var html=escHtml(C.code||'');
+for(var i=0;i<items.length;i++){var tok='__HL_TOKEN_'+i+'__';html=html.replace(items[i].re,tok);}
+for(var j=0;j<items.length;j++){var tok2='__HL_TOKEN_'+j+'__';var span='<span class="hl" data-url="'+encodeURI(items[j].url)+'" tabindex="0" role="button" aria-label="'+items[j].label+'">'+escHtml(items[j].label)+'<\\/span>';html=html.split(tok2).join(span);}
+code.innerHTML=html;
+var pending=null;function openD(u){pending=u;overlay.setAttribute('aria-hidden','false');}function closeD(){overlay.setAttribute('aria-hidden','true');pending=null;}
+overlay.addEventListener('click',function(e){if(e.target===overlay)closeD();});
+overlay.querySelector('[data-act="no"]').addEventListener('click',closeD);
+overlay.querySelector('[data-act="yes"]').addEventListener('click',function(){if(pending){(C.openInNewTab!==false)?window.open(pending,'_blank','noopener'):location.href=pending;}closeD();});
+wrap.addEventListener('click',function(e){var el=e.target&&e.target.closest?e.target.closest('.hl'):null;if(!el)return;var u=el.getAttribute('data-url');if(u)openD(u);});
+wrap.addEventListener('keydown',function(e){if((e.key==='Enter'||e.key===' ')&&e.target&&e.target.classList&&e.target.classList.contains('hl')){e.preventDefault();var u=e.target.getAttribute('data-url');if(u)openD(u);}});
+})(cfg);`;
+
+  return '\n<div id="'+divId+'" data-code-widget></div>\n'
+    + '<script type="text/javascript">(function(){\n'
+    + 'var cfg='+ safeCfg +';\n'
+    + 'cfg.target = cfg.target || "#'+ divId +'";\n'
+    + CORE + '\n'
+    + '})();<\/script>';
+}
+
+
+    // Stejná renderovací logika jako ve widgetu
+    function generateCore(cfg){
+      const host = document.querySelector(cfg.target); if (!host) return;
+      const root = host.attachShadow ? host.attachShadow({mode:'open'}) : host;
+      const style = document.createElement('style'); style.textContent = `
+        .ccode { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, \"Liberation Mono\", \"Courier New\", monospace; }
+        .ccode pre { margin: 0; padding: 12px; background: #0f172a0d; border: 1px solid #e5e7eb; border-radius: 10px; overflow: auto; }
+        .ccode code { font-size: 14px; line-height: 1.5; white-space: pre; }
+        .ccode .hl { background: #fde68a; border-radius: 6px; padding: 0 3px; cursor: pointer; transition: filter .15s ease; }
+        .ccode .hl:hover { filter: brightness(.94); }
+        .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.35); display: none; align-items: center; justify-content: center; z-index: 2147483647; }
+        .overlay[aria-hidden=\"false\"] { display: flex; }
+        .dialog { background: #ffffff; width: min(520px, 92vw); border-radius: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.15); border: 1px solid #e5e7eb; }
+        .dialog header { padding: 14px 16px; font-weight: 600; border-bottom: 1px solid #f1f5f9; }
+        .dialog .content { padding: 16px; color: #111827; }
+        .dialog .actions { display: flex; gap: 8px; justify-content: flex-end; padding: 12px 16px; border-top: 1px solid #f1f5f9; }
+        .btn { appearance: none; border: 1px solid #e5e7eb; background: #f8fafc; padding: 8px 12px; border-radius: 10px; cursor: pointer; }
+        .btn.primary { background: #111827; color: white; border-color: #111827; }`;
+      const wrap = document.createElement('div'); wrap.className='ccode';
+      const pre = document.createElement('pre'); const code = document.createElement('code'); pre.appendChild(code); wrap.appendChild(pre);
+      const overlay = document.createElement('div'); overlay.className='overlay'; overlay.setAttribute('aria-hidden','true'); overlay.innerHTML = `<div class=\"dialog\" role=\"dialog\" aria-modal=\"true\"><header></header><div class=\"content\"></div><div class=\"actions\"><button class=\"btn\" data-act=\"no\"></button><button class=\"btn primary\" data-act=\"yes\"></button></div></div>`;
+      root.append(style, wrap, overlay);
+      const t = (cfg.i18n||{}); const i18n = { title: t.title||'Chceš se o tom dozvědět víc?', desc: t.desc||'Klikl/a jsi na zvýrazněnou část kódu. Můžu tě přesměrovat na související kapitolu v Moodlu.', yes: t.yes||'Ano, přejít', no: t.no||'Ne, zůstat'};
+      overlay.querySelector('header').textContent = i18n.title; overlay.querySelector('.content').textContent = i18n.desc; overlay.querySelector('[data-act=\"yes\"]').textContent = i18n.yes; overlay.querySelector('[data-act=\"no\"]').textContent = i18n.no;
+      const escapeHtml = s => s.replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[ch]));
+      const escReg = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const items = (cfg.links||[]).map(x=>({ re: new RegExp(((cfg.wholeWord!==false)?`\\\\b${escReg(x.match)}\\\\b`:escReg(x.match)),'g'), url:x.url, label:x.match })).sort((a,b)=>b.label.length-a.label.length);
+      let html = escapeHtml(cfg.code||'');
+      items.forEach((it,idx)=>{ const token=`__HL_TOKEN_${idx}__`; html = html.replace(it.re, token); });
+      items.forEach((it,idx)=>{ const token=`__HL_TOKEN_${idx}__`; const span = `<span class=\"hl\" data-url=\"${encodeURI(it.url)}\" tabindex=\"0\" role=\"button\" aria-label=\"${it.label}\">${escapeHtml(it.label)}<\\/span>`; html = html.split(token).join(span); });
+      code.innerHTML = html;
+      let pendingUrl = null; const openDialog = url=>{ pendingUrl=url; overlay.setAttribute('aria-hidden','false'); }; const closeDialog=()=>{ overlay.setAttribute('aria-hidden','true'); pendingUrl=null; };
+      overlay.addEventListener('click', e=>{ if(e.target===overlay) closeDialog(); });
+      overlay.querySelector('[data-act=\"no\"]').addEventListener('click', closeDialog);
+      overlay.querySelector('[data-act=\"yes\"]').addEventListener('click', ()=>{ if(pendingUrl){ (cfg.openInNewTab!==false) ? window.open(pendingUrl,'_blank','noopener') : (location.href=pendingUrl); } closeDialog(); });
+      wrap.addEventListener('click', e=>{ const el=e.target.closest('.hl'); if(!el) return; const url=el.getAttribute('data-url'); if(url) openDialog(url); });
+      wrap.addEventListener('keydown', e=>{ if((e.key==='Enter'||e.key===' ')&& e.target.classList && e.target.classList.contains('hl')){ e.preventDefault(); const url=e.target.getAttribute('data-url'); if(url) openDialog(url); } });
+    }
+
+    $('#genSnippet').addEventListener('click', () => {
+      const cfg = {
+        target: $('#targetSelector').value || '#codeWidget1',
+        code: state.code || '',
+        links: state.links.slice(),
+        i18n: { title: 'Chceš se o tom dozvědět víc?', desc: 'Klikl/a jsi na zvýrazněnou část kódu. Můžu tě přesměrovat na související kapitolu v Moodlu.', yes: 'Ano, přejít', no: 'Ne, zůstat' },
+        openInNewTab: state.openInNewTab,
+        wholeWord: state.wholeWord
+      };
+      const snip = getSnippet(cfg);
+      $('#snippetOut').value = snip;
+    });
+
+    $('#copySnippet').addEventListener('click', async () => {
+      const text = $('#snippetOut').value;
+      if (!text) return alert('Nejdřív vygeneruj snippet.');
+      try { await navigator.clipboard.writeText(text); alert('Zkopírováno do schránky.'); } catch(e){ alert('Nepodařilo se zkopírovat.'); }
+    });
+
+    $('#downloadSnippet').addEventListener('click', () => {
+      const text = $('#snippetOut').value;
+      if (!text) return alert('Nejdřív vygeneruj snippet.');
+      downloadText('moodle-snippet.html', text);
+    });
+
+    // Init
+    handleCodeInput();
+    renderMap();
+    renderRules();
+  </script>
+</body>
+</html>

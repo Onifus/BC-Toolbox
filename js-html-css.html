@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Generátor karty s kódem → 3 okna (HTML / CSS / JS)</title>
+  <style>
+    :root { --bg:#0b0f17; --card:#121826; --muted:#a7b0c0; --fg:#e6edf7; --accent:#7aa2ff; --btn:#1a2440; --btnActive:#223257; }
+    html,body{height:100%}
+    body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,Arial}
+    .container{max-width:1100px;margin:0 auto;padding:24px}
+    h1{font-size:clamp(20px,3.8vw,32px);margin:0 0 16px}
+    p{color:var(--muted);margin:0 0 18px}
+    .grid{display:grid;grid-template-columns:1fr;gap:16px}
+    @media(min-width:1100px){.grid{grid-template-columns:1fr 1fr}}
+    .card{background:var(--card);border:1px solid #1b2436;border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.25);overflow:hidden}
+    .card h2{font-size:18px;margin:0;padding:14px 16px;border-bottom:1px solid #1b2436;background:#0e1422}
+    .section{padding:12px 12px 14px}
+    textarea{width:100%;min-height:160px;resize:vertical;background:#0b1220;color:var(--fg);border:1px solid #1b2436;border-radius:12px;padding:12px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+    .small{font-size:12px;color:#93a1b7}
+    button{cursor:pointer;background:var(--accent);color:#081020;border:0;border-radius:12px;padding:10px 14px;font-weight:600}
+    button.secondary{background:#19243a;color:var(--fg);border:1px solid #263552}
+    .controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    .out pre{margin:0; padding:12px; background:#06101f; color:#dfe7f6; border-radius:12px; overflow:auto; border:1px solid #1b2436;}
+    .monospace{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+    .preview-wrap{padding:12px}
+    .tag{display:inline-block;background:#152036;border:1px solid #2a3b5a;border-radius:999px;color:#b9c6e2;padding:4px 10px;font-size:12px}
+    .footer{color:#7f8daa;margin-top:16px}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Karta s kódem (Prism + řádky) → 3 okna: HTML / CSS / JS</h1>
+    <p>Zadej <strong>tři</strong> texty: <em>HTML</em>, <em>CSS</em> a <em>JS</em>. Výsledný snippet vykreslí kartu s přepínačem (tři „kostičky“ vedle sebe) a bude přepínat mezi třemi okny kódu. Vše je izolováno v <strong>Shadow DOM</strong>.</p>
+
+    <div class="grid">
+      <div class="card">
+        <h2>Vstup – HTML / CSS / JS (3 varianty)</h2>
+        <div class="section">
+          <label class="small" for="inHtml">HTML</label>
+          <textarea id="inHtml" placeholder="<!-- Jednoduché HTML -->\n<div class=\"box\">Ahoj světe</div>"></textarea>
+          <div style="height:10px"></div>
+
+          <label class="small" for="inCss">CSS</label>
+          <textarea id="inCss" placeholder="/* Stylování */\n.box{ padding:12px; background:#111827; color:#e6edf7; border-radius:8px }"></textarea>
+          <div style="height:10px"></div>
+
+          <label class="small" for="inJs">JS</label>
+          <textarea id="inJs" placeholder="// JavaScript ukázka\nconsole.log('Hello from JS')"></textarea>
+
+          <div class="controls" style="margin-top:10px">
+            <button id="generateBtn">Vygenerovat snippet</button>
+            <button id="copyBtn" class="secondary">Zkopírovat snippet</button>
+            <button id="copyPreviewBtn" class="secondary">Kopírovat náhled</button>
+            <span id="copyState" class="small"></span>
+          </div>
+          <p class="small" style="margin-top:8px">Prism se načítá z CDN (manual mód). Zvýraznění se provádí pro první blok při startu a pro ostatní až při jejich zobrazení.</p>
+        </div>
+      </div>
+
+      <div class="card out">
+        <h2>Výstup – kód ke vložení (1× &lt;div&gt; + &lt;script&gt;)</h2>
+        <div class="section">
+          <div class="tag monospace" id="idTag">id: —</div>
+          <pre id="outCode" class="monospace">// Stiskni „Vygenerovat snippet“</pre>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Náhled</h2>
+        <div class="preview-wrap">
+          <div id="previewHost" class="monospace small">Zatím prázdné…</div>
+        </div>
+      </div>
+    </div>
+
+    <p class="footer small">Externí knihovny: Prism CSS/JS + plugin Line Numbers z jsDelivr. Lze přidat témata a další jazyky.</p>
+  </div>
+
+<script>
+  function uid(){ return 'snippet-' + Math.random().toString(36).slice(2,10); }
+
+  function escTpl(str){
+    str = String(str);
+    // Escape backslashes and backticks used in template literals
+    str = str.replace(/\\/g, "\\\\").replace(/`/g, "\\`");
+    // Disarm closing tags that would terminate surrounding <script>
+    str = str.replace(/<\/script>/gi, "<\/script>");
+    str = str.replace(/<\/style>/gi,  "<\\/style>");
+    return str;
+  }
+
+function safeForInlineScript(s){
+  return JSON.stringify(String(s))
+    .replace(/</g, '\\u003C')       // rozbije
+    .replace(/\u2028/g, '\\u2028')  // bezpečné pro starší enginy
+    .replace(/\u2029/g, '\\u2029');
+}
+
+function buildSnippet({srcHtml, srcCss, srcJs, id, theme}) {
+  // Převod na Base64 (funguje i s diakritikou)
+  function toB64(s){
+    return btoa(unescape(encodeURIComponent(String(s))));
+  }
+
+  const prismThemeHref = theme === 'light'
+        ? 'https://cdn.jsdelivr.net/npm/prismjs@1/themes/prism.min.css'
+        : 'https://cdn.jsdelivr.net/npm/prismjs@1/themes/prism-tomorrow.min.css';
+
+  // Připrav Base64 balíčky mimo inline skript
+  const b64Html = JSON.stringify(toB64("\n" + srcHtml + "\n"));
+  const b64Css  = JSON.stringify(toB64("\n" + srcCss  + "\n"));
+  const b64Js   = JSON.stringify(toB64("\n" + srcJs   + "\n"));
+
+  return (
+`<div id="${id}"></div>
+<script>(function(){
+  var host = document.getElementById('${id}');
+  if(!host){ console.error('Host element #${id} nenalezen'); return; }
+  var root = host.shadowRoot || host.attachShadow({mode:'open'});
+
+  // Dekodér Base64 až v runtime
+  function fromB64(b64){
+    return decodeURIComponent(escape(atob(b64)));
+  }
+
+  var style = document.createElement('style');
+  style.textContent =
+    ".card{background:#111827;border:1px solid #1f2937;border-radius:12px;box-shadow:0 6px 20px rgba(0,0,0,.3);overflow:hidden}"+
+    ".head{display:flex;gap:8px;align-items:center;justify-content:space-between;font:600 14px/1.2 system-ui;background:#0b1220;color:#d1d5db;padding:10px 12px;border-bottom:1px solid #1f2937}"+
+    ".switch{display:flex;gap:8px}"+
+    ".btn{appearance:none;-webkit-appearance:none;cursor:pointer;border:1px solid #2a3754;background:#1a2440;color:#d7def0;padding:6px 10px;border-radius:10px;font:600 12px/1 system-ui}"+
+    ".btn[aria-pressed='true']{background:#223257;border-color:#334873;color:#fff}"+
+    "pre{margin:0}";
+  root.appendChild(style);
+
+  var card = document.createElement('div'); card.className='card';
+  var head = document.createElement('div'); head.className='head';
+  var title = document.createElement('div'); title.textContent='Kód (HTML / CSS / JS)';
+  var sw = document.createElement('div'); sw.className='switch';
+
+  var b1 = document.createElement('button'); b1.className='btn'; b1.type='button'; b1.textContent='HTML'; b1.setAttribute('aria-pressed','true');
+  var b2 = document.createElement('button'); b2.className='btn'; b2.type='button'; b2.textContent='CSS';  b2.setAttribute('aria-pressed','false');
+  var b3 = document.createElement('button'); b3.className='btn'; b3.type='button'; b3.textContent='JS';   b3.setAttribute('aria-pressed','false');
+  var copy = document.createElement('button'); copy.className='btn'; copy.type='button'; copy.textContent='📋 Zkopírovat';
+  sw.append(b1,b2,b3,copy);
+  head.appendChild(title); head.appendChild(sw);
+
+  var pre1 = document.createElement('pre'); pre1.className='line-numbers';
+  var code1= document.createElement('code'); code1.className='language-markup';
+  code1.textContent = fromB64(${b64Html});
+  pre1.appendChild(code1);
+
+  var pre2 = document.createElement('pre'); pre2.className='line-numbers'; pre2.style.display='none';
+  var code2= document.createElement('code'); code2.className='language-css';
+  code2.textContent = fromB64(${b64Css});
+  pre2.appendChild(code2);
+
+  var pre3 = document.createElement('pre'); pre3.className='line-numbers'; pre3.style.display='none';
+  var code3= document.createElement('code'); code3.className='language-js';
+  code3.textContent = fromB64(${b64Js});
+  pre3.appendChild(code3);
+
+  card.append(head,pre1,pre2,pre3);
+  root.appendChild(card);
+
+  var active = 1;
+  var code2Highlighted = false, code3Highlighted = false;
+  function show(i){
+    active = i;
+    pre1.style.display = (i===1)?'':'none';
+    pre2.style.display = (i===2)?'':'none';
+    pre3.style.display = (i===3)?'':'none';
+    b1.setAttribute('aria-pressed', i===1 ? 'true':'false');
+    b2.setAttribute('aria-pressed', i===2 ? 'true':'false');
+    b3.setAttribute('aria-pressed', i===3 ? 'true':'false');
+    if(i===2 && !code2Highlighted && window.Prism){ Prism.highlightElement(code2); code2Highlighted=true; }
+    if(i===3 && !code3Highlighted && window.Prism){ Prism.highlightElement(code3); code3Highlighted=true; }
+  }
+  b1.onclick=function(){show(1)};
+  b2.onclick=function(){show(2)};
+  b3.onclick=function(){show(3)};
+
+  copy.onclick=function(){
+    var txt = active===1 ? code1.textContent : active===2 ? code2.textContent : code3.textContent;
+    navigator.clipboard.writeText(txt).catch(function(){});
+  };
+
+  function addShadowStyles(href){ var link=document.createElement('link'); link.rel='stylesheet'; link.href=href; root.appendChild(link); }
+  addShadowStyles('${prismThemeHref}');
+  addShadowStyles('https://cdn.jsdelivr.net/npm/prismjs@1/plugins/line-numbers/prism-line-numbers.css');
+
+  function load(src){return new Promise(function(res,rej){var s=document.createElement('script'); s.src=src; s.onload=res; s.onerror=rej; document.head.appendChild(s);});}
+  (function(){ var s=document.createElement('script'); s.text = 'window.Prism=window.Prism||{};Prism.manual=true;'; document.head.appendChild(s); })();
+
+  load('https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-core.min.js')
+    .then(function(){ return load('https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-markup.min.js'); })
+    .then(function(){ return load('https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-css.min.js'); })
+    .then(function(){ return load('https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-clike.min.js'); })
+    .then(function(){ return load('https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-javascript.min.js'); })
+    .then(function(){ return load('https://cdn.jsdelivr.net/npm/prismjs@1/plugins/line-numbers/prism-line-numbers.min.js'); })
+    .then(function(){ if(window.Prism){ Prism.highlightElement(code1); } })
+    .catch(function(e){ console.error('Nepodařilo se načíst Prism:', e); });
+})();` + '<' + '/script>'
+  );
+}
+
+
+function renderPreview(htmlText, cssText, jsText){
+  const host = document.getElementById('previewHost');
+  host.textContent='';
+  const root = host.attachShadow ? (host.shadowRoot || host.attachShadow({mode:'open'})) : host;
+  while(root.firstChild) root.removeChild(root.firstChild);
+
+  const style = document.createElement('style');
+  style.textContent = '.card{background:#111827;border:1px solid #1f2937;border-radius:12px;overflow:hidden}'
+    +'.head{display:flex;gap:8px;align-items:center;justify-content:space-between;font:600 14px system-ui;background:#0b1220;color:#d1d5db;padding:10px 12px;border-bottom:1px solid #1f2937}'
+    +'.switch{display:flex;gap:8px}'
+    +'.btn{border:1px solid #2a3754;background:#1a2440;color:#d7def0;padding:6px 10px;border-radius:10px;font:600 12px/1 system-ui}'
+    +'.btn.active{background:#223257;border-color:#334873}'
+    +'pre{margin:0;padding:12px;color:#e5e7eb;white-space:pre;overflow:auto;max-height:300px;}';
+  root.appendChild(style);
+
+  const card = document.createElement('div'); card.className='card';
+  const head = document.createElement('div'); head.className='head';
+  const title= document.createElement('div'); title.textContent='Kód (náhled)';
+
+  const sw = document.createElement('div'); sw.className='switch';
+  const b1 = document.createElement('button'); b1.className='btn active'; b1.textContent='HTML';
+  const b2 = document.createElement('button'); b2.className='btn'; b2.textContent='CSS';
+  const b3 = document.createElement('button'); b3.className='btn'; b3.textContent='JS';
+  const copy = document.createElement('button'); copy.className='btn'; copy.textContent='📋 Zkopírovat současné okno';
+  sw.append(b1,b2,b3,copy);
+  head.append(title,sw);
+
+  const pre1 = document.createElement('pre'); pre1.textContent = htmlText;
+  const pre2 = document.createElement('pre'); pre2.textContent = cssText; pre2.style.display='none';
+  const pre3 = document.createElement('pre'); pre3.textContent = jsText;  pre3.style.display='none';
+
+  card.append(head,pre1,pre2,pre3);
+  root.appendChild(card);
+
+  let active = 1;
+  function show(i){
+    active = i;
+    pre1.style.display = i===1?'':'none';
+    pre2.style.display = i===2?'':'none';
+    pre3.style.display = i===3?'':'none';
+    [b1,b2,b3].forEach((b,idx)=>b.classList.toggle('active', i===idx+1));
+  }
+  b1.onclick=()=>show(1);
+  b2.onclick=()=>show(2);
+  b3.onclick=()=>show(3);
+
+  copy.onclick=()=>{
+    const txt = active===1 ? pre1.textContent : active===2 ? pre2.textContent : pre3.textContent;
+    navigator.clipboard.writeText(txt).catch(()=>{});
+  };
+}
+
+
+
+  const inHtml = document.getElementById('inHtml');
+  const inCss  = document.getElementById('inCss');
+  const inJs   = document.getElementById('inJs');
+  const out  = document.getElementById('outCode');
+  const idTag= document.getElementById('idTag');
+  let currentId = uid();
+  idTag.textContent = 'id: #' + currentId;
+
+  document.getElementById('generateBtn').addEventListener('click', ()=>{
+    const srcHtml = inHtml.value.trim();
+    const srcCss  = inCss.value.trim();
+    const srcJs   = inJs.value.trim();
+    const code = buildSnippet({srcHtml, srcCss, srcJs, id: currentId});
+    out.textContent = code;
+    renderPreview(srcHtml, srcCss, srcJs);
+    currentId = uid();
+    idTag.textContent = 'id: #' + currentId;
+    document.getElementById('copyState').textContent = '';
+  });
+
+  document.getElementById('copyBtn').addEventListener('click', async ()=>{
+    try{ await navigator.clipboard.writeText(out.textContent); document.getElementById('copyState').textContent = 'Zkopírováno ✅'; }
+    catch(e){ document.getElementById('copyState').textContent = 'Kopírování selhalo'; }
+  });
+
+  document.getElementById('copyPreviewBtn').addEventListener('click', async ()=>{
+    try{ await navigator.clipboard.writeText(document.getElementById('previewHost').textContent); document.getElementById('copyState').textContent = 'Náhled zkopírován ✅'; }
+    catch(e){ document.getElementById('copyState').textContent = 'Kopírování selhalo'; }
+  });
+
+  inHtml.value = `<!-- HTML ukázka -->\n<div class="box">Ahoj světe</div>`;
+  inCss.value  = `/* CSS ukázka */\n.box{ padding:12px; background:#111827; color:#e6edf7; border-radius:8px }`;
+  inJs.value   = `// JS ukázka\nconsole.log('Hello from JS')`;
+</script>
+</body>
+</html>
