@@ -49,9 +49,17 @@
     .mini{font-size:12px}
 
     /* STICKY mapování na pravé straně, aby bylo vidět při scrolování */
-    @media(min-width:960px){
-      .sticky-card{position:sticky; top:12px; max-height:calc(100vh - 48px); overflow:auto}
+    @media (min-width: 960px) {
+      .sticky-card{
+        position: sticky;
+        top: 12px;
+        /* dříve: max-height: calc(100vh - 48px); */
+        /* nově – vždy nech cca 320 px místa pod ní */
+        max-height: calc(100vh - 320px);
+        overflow: auto;
+      }
     }
+
   </style>
   <link rel="stylesheet" href="https://unpkg.com/prismjs@1.29.0/themes/prism-okaidia.min.css">
   <script src="https://unpkg.com/prismjs@1.29.0/components/prism-core.min.js"></script>
@@ -450,3 +458,4 @@ wrap.addEventListener('keydown',function(e){if((e.key==='Enter'||e.key===' ')&&e
   </script>
 </body>
 </html>
+
