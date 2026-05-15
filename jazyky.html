@@ -1,0 +1,783 @@
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Generátor karty s kódem → 3 okna (HTML / CSS / JS)</title>
+  <style>
+    :root { --bg:#0b0f17; --card:#121826; --muted:#a7b0c0; --fg:#e6edf7; --accent:#7aa2ff; --btn:#1a2440; --btnActive:#223257; }
+    html,body{height:100%}
+    body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,Arial}
+    .container{max-width:1100px;margin:0 auto;padding:24px}
+    h1{font-size:clamp(20px,3.8vw,32px);margin:0 0 16px}
+    p{color:var(--muted);margin:0 0 18px}
+    .grid{display:grid;grid-template-columns:1fr;gap:16px}
+    @media(min-width:1100px){.grid{grid-template-columns:1fr 1fr}}
+    .card{background:var(--card);border:1px solid #1b2436;border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.25);overflow:hidden}
+    .card h2{font-size:18px;margin:0;padding:14px 16px;border-bottom:1px solid #1b2436;background:#0e1422}
+    .section{padding:12px 12px 14px}
+    textarea{width:100%;min-height:160px;resize:vertical;background:#0b1220;color:var(--fg);border:1px solid #1b2436;border-radius:12px;padding:12px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+    .small{font-size:12px;color:#93a1b7}
+    button{cursor:pointer;background:var(--accent);color:#081020;border:0;border-radius:12px;padding:10px 14px;font-weight:600}
+    button.secondary{background:#19243a;color:var(--fg);border:1px solid #263552}
+    .controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    .out pre{margin:0; padding:12px; background:#06101f; color:#dfe7f6; border-radius:12px; overflow:auto; border:1px solid #1b2436;}
+    .monospace{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+    .preview-wrap{padding:12px}
+    .tag{display:inline-block;background:#152036;border:1px solid #2a3b5a;border-radius:999px;color:#b9c6e2;padding:4px 10px;font-size:12px}
+    .footer{color:#7f8daa;margin-top:16px}
+	
+	.code-window{
+	  border:1px solid #1b2436;
+	  border-radius:12px;
+	  padding:12px;
+	  margin-bottom:12px;
+	  background:#0b1220;
+	}
+
+	.code-window-head{
+	  display:grid;
+	  grid-template-columns:1fr 1fr auto;
+	  gap:8px;
+	  margin-bottom:8px;
+	}
+
+	.code-window-head input,
+	.code-window-head select{
+	  background:#08101f;
+	  color:var(--fg);
+	  border:1px solid #1b2436;
+	  border-radius:10px;
+	  padding:8px 10px;
+	}
+
+	.code-window textarea{
+	  min-height:140px;
+	}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Karta s kódem (Prism + řádky) → 3 okna: HTML / CSS / JS</h1>
+    <p>Zadej <strong>tři</strong> texty: <em>HTML</em>, <em>CSS</em> a <em>JS</em>. Výsledný snippet vykreslí kartu s přepínačem (tři „kostičky“ vedle sebe) a bude přepínat mezi třemi okny kódu. Vše je izolováno v <strong>Shadow DOM</strong>.</p>
+
+    <div class="grid">
+      <div class="card">
+        <h2>Vstup – HTML / CSS / JS (3 varianty)</h2>
+        <div class="section">
+			<div class="controls" style="margin-bottom:10px">
+			  <button id="addWindowBtn" type="button" class="secondary">+ Přidat okno</button>
+			</div>
+
+			<div id="windows"></div>
+
+          <div class="controls" style="margin-top:10px">
+            <button id="generateBtn">Vygenerovat snippet</button>
+            <button id="copyBtn" class="secondary">Zkopírovat snippet</button>
+            <button id="copyPreviewBtn" class="secondary">Kopírovat náhled</button>
+            <span id="copyState" class="small"></span>
+          </div>
+          <p class="small" style="margin-top:8px">Prism se načítá z CDN (manual mód). Zvýraznění se provádí pro první blok při startu a pro ostatní až při jejich zobrazení.</p>
+        </div>
+      </div>
+
+      <div class="card out">
+        <h2>Výstup – kód ke vložení (1× &lt;div&gt; + &lt;script&gt;)</h2>
+        <div class="section">
+          <div class="tag monospace" id="idTag">id: —</div>
+          <pre id="outCode" class="monospace">// Stiskni „Vygenerovat snippet“</pre>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Náhled</h2>
+        <div class="preview-wrap">
+          <div id="previewHost" class="monospace small">Zatím prázdné…</div>
+        </div>
+      </div>
+    </div>
+
+    <p class="footer small">Externí knihovny: Prism CSS/JS + plugin Line Numbers z jsDelivr. Lze přidat témata a další jazyky.</p>
+  </div>
+
+<script>
+  function uid(){ return 'snippet-' + Math.random().toString(36).slice(2,10); }
+
+  function escTpl(str){
+    str = String(str);
+    // Escape backslashes and backticks used in template literals
+    str = str.replace(/\\/g, "\\\\").replace(/`/g, "\\`");
+    // Disarm closing tags that would terminate surrounding <script>
+    str = str.replace(/<\/script>/gi, "<\/script>");
+    str = str.replace(/<\/style>/gi,  "<\\/style>");
+    return str;
+  }
+
+function safeForInlineScript(s){
+  return JSON.stringify(String(s))
+    .replace(/</g, '\\u003C')       // rozbije
+    .replace(/\u2028/g, '\\u2028')  // bezpečné pro starší enginy
+    .replace(/\u2029/g, '\\u2029');
+}
+
+function buildSnippet({ tabs, id }) {
+  function toB64(s) {
+    const bytes = new TextEncoder().encode(String(s));
+    let binary = '';
+
+    for (let i = 0; i < bytes.length; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+
+    return btoa(binary);
+  }
+
+  const packedTabs = tabs.map(tab => ({
+    title: tab.title || 'Kód',
+    language: tab.language || 'markup',
+    component: tab.component || tab.language || 'markup',
+    codeB64: toB64("\n" + (tab.code || '') + "\n")
+  }));
+
+  const tabsJson = JSON.stringify(packedTabs)
+    .replace(/</g, '\\u003C')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
+
+  return (
+`<div id="${id}"></div>
+<script>
+(function() {
+    var host = document.getElementById('${id}');
+    if (!host) {
+        console.error('Host element #${id} nenalezen');
+        return;
+    }
+
+    var root = host.shadowRoot || host.attachShadow({
+        mode: 'open'
+    });
+
+    var tabs = ${tabsJson};
+
+    function fromB64(b64) {
+        var binary = atob(b64);
+        var bytes = new Uint8Array(binary.length);
+
+        for (var i = 0; i < binary.length; i++) {
+            bytes[i] = binary.charCodeAt(i);
+        }
+
+        return new TextDecoder('utf-8').decode(bytes);
+    }
+
+    var style = document.createElement('style');
+    style.textContent =
+        ".card{background:#111827;border:1px solid #1f2937;border-radius:12px;box-shadow:0 6px 20px rgba(0,0,0,.3);overflow:hidden}" +
+        ".head{display:flex;gap:8px;align-items:center;justify-content:space-between;font:600 14px/1.2 system-ui;background:#0b1220;color:#d1d5db;padding:10px 12px;border-bottom:1px solid #1f2937}" +
+        ".switch{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}" +
+        ".btn{appearance:none;-webkit-appearance:none;cursor:pointer;border:1px solid #2a3754;background:#1a2440;color:#d7def0;padding:6px 10px;border-radius:10px;font:600 12px/1 system-ui}" +
+        ".btn[aria-pressed='true']{background:#223257;border-color:#334873;color:#fff}" +
+        "pre{margin:0;padding:16px;overflow:auto;max-height:760px;background:#0b1220;color:#d1d5db}" +
+        "code{font-family:Consolas,Monaco,'Courier New',monospace;font-size:13px;line-height:1.5;white-space:pre;color:#d1d5db}" +
+		".card.is-fullscreen,.card:fullscreen{position:fixed;inset:0;z-index:2147483647;border-radius:0;display:flex;flex-direction:column;width:100vw;height:100vh}" +
+		".card.is-fullscreen .head,.card:fullscreen .head{flex:0 0 auto}" +
+		".card.is-fullscreen pre,.card:fullscreen pre{flex:1;max-height:none;height:auto}" +
+		".card.is-fullscreen code,.card:fullscreen code{font-size:15px}";
+    root.appendChild(style);
+
+    var card = document.createElement('div');
+    card.className = 'card';
+
+    var head = document.createElement('div');
+    head.className = 'head';
+
+    var title = document.createElement('div');
+    title.textContent = 'Kód';
+
+    var sw = document.createElement('div');
+    sw.className = 'switch';
+
+    head.appendChild(title);
+    head.appendChild(sw);
+
+    var pres = [];
+    var codes = [];
+    var buttons = [];
+    var active = 0;
+
+    tabs.forEach(function(tab, index) {
+        var btn = document.createElement('button');
+        btn.className = 'btn';
+        btn.type = 'button';
+        btn.textContent = tab.title || ('Okno ' + (index + 1));
+        btn.setAttribute('aria-pressed', index === 0 ? 'true' : 'false');
+
+        var pre = document.createElement('pre');
+        pre.className = 'line-numbers';
+        pre.style.display = index === 0 ? '' : 'none';
+
+        var code = document.createElement('code');
+        code.className = 'language-' + (tab.language || 'markup');
+        code.textContent = fromB64(tab.codeB64 || '');
+
+        pre.appendChild(code);
+
+        btn.onclick = function() {
+            show(index);
+        };
+
+        sw.appendChild(btn);
+        pres.push(pre);
+        codes.push(code);
+        buttons.push(btn);
+    });
+
+    var copy = document.createElement('button');
+	copy.className = 'btn';
+	copy.type = 'button';
+	copy.textContent = '📋 Zkopírovat';
+
+	var fullscreen = document.createElement('button');
+	fullscreen.className = 'btn';
+	fullscreen.type = 'button';
+	fullscreen.textContent = '⛶ Fullscreen';
+
+	sw.appendChild(copy);
+	sw.appendChild(fullscreen);
+
+    card.appendChild(head);
+
+    pres.forEach(function(pre) {
+        card.appendChild(pre);
+    });
+
+    root.appendChild(card);
+
+    function show(index) {
+        active = index;
+
+        for (var i = 0; i < pres.length; i++) {
+            pres[i].style.display = i === index ? '' : 'none';
+            buttons[i].setAttribute('aria-pressed', i === index ? 'true' : 'false');
+        }
+
+        if (window.Prism && codes[index]) {
+            Prism.highlightElement(codes[index]);
+        }
+    }
+
+    copy.onclick = function() {
+        var code = codes[active];
+        var txt = code ? code.textContent : '';
+        navigator.clipboard.writeText(txt).catch(function() {});
+    };
+	
+	function updateFullscreenButton() {
+		if (document.fullscreenElement === card || card.classList.contains('is-fullscreen')) {
+			fullscreen.textContent = '✕ Zavřít fullscreen';
+		} else {
+			fullscreen.textContent = '⛶ Fullscreen';
+		}
+	}
+
+	fullscreen.onclick = function() {
+		if (document.fullscreenElement === card) {
+			if (document.exitFullscreen) {
+				document.exitFullscreen();
+			}
+			return;
+		}
+
+		if (card.classList.contains('is-fullscreen')) {
+			card.classList.remove('is-fullscreen');
+			updateFullscreenButton();
+			return;
+		}
+
+		if (card.requestFullscreen) {
+			card.requestFullscreen().then(function() {
+				updateFullscreenButton();
+			}).catch(function() {
+				card.classList.add('is-fullscreen');
+				updateFullscreenButton();
+			});
+		} else {
+			card.classList.add('is-fullscreen');
+			updateFullscreenButton();
+		}
+	};
+
+	document.addEventListener('fullscreenchange', function() {
+		if (document.fullscreenElement !== card) {
+			card.classList.remove('is-fullscreen');
+		}
+
+		updateFullscreenButton();
+	});
+
+	document.addEventListener('keydown', function(e) {
+		if (e.key === 'Escape') {
+			card.classList.remove('is-fullscreen');
+			updateFullscreenButton();
+		}
+	});
+
+    function addShadowStyles(href) {
+        var link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = href;
+        root.appendChild(link);
+    }
+
+    function load(src) {
+        return new Promise(function(resolve, reject) {
+            var s = document.createElement('script');
+            s.src = src;
+            s.onload = resolve;
+            s.onerror = reject;
+            document.head.appendChild(s);
+        });
+    }
+
+    function uniqueComponents() {
+        var map = {};
+        var list = [];
+
+        tabs.forEach(function(tab) {
+            var component = tab.component || tab.language || 'markup';
+
+            if (!map[component]) {
+                map[component] = true;
+                list.push(component);
+            }
+        });
+
+        return list;
+    }
+
+    function addWithDependencies(component, out, seen) {
+        if (seen[component]) {
+            return;
+        }
+
+        seen[component] = true;
+
+        if (component === 'javascript') {
+            addWithDependencies('clike', out, seen);
+        }
+
+        if (component === 'csharp') {
+            addWithDependencies('clike', out, seen);
+        }
+
+        if (component === 'php') {
+            addWithDependencies('markup-templating', out, seen);
+        }
+
+        if (component === 'cshtml') {
+            addWithDependencies('markup-templating', out, seen);
+            addWithDependencies('csharp', out, seen);
+        }
+
+        if (component === 'markup-templating') {
+            addWithDependencies('markup', out, seen);
+        }
+
+        out.push(component);
+    }
+
+    function getComponentsToLoad() {
+        var required = uniqueComponents();
+        var out = [];
+        var seen = {};
+
+        for (var i = 0; i < required.length; i++) {
+            addWithDependencies(required[i], out, seen);
+        }
+
+        return out;
+    }
+
+    var prismBase = 'https:' + '//cdn.jsdelivr.net/npm/prismjs@1/';
+
+    addShadowStyles(prismBase + 'themes/prism-tomorrow.min.css');
+    addShadowStyles(prismBase + 'plugins/line-numbers/prism-line-numbers.css');
+
+    window.Prism = window.Prism || {};
+    window.Prism.manual = true;
+
+    load(prismBase + 'components/prism-core.min.js')
+        .then(function() {
+            var components = getComponentsToLoad();
+            var chain = Promise.resolve();
+
+            components.forEach(function(component) {
+                if (component === 'markup') {
+                    chain = chain.then(function() {
+                        return load(prismBase + 'components/prism-markup.min.js');
+                    });
+                } else {
+                    chain = chain.then(function() {
+                        return load(prismBase + 'components/prism-' + component + '.min.js');
+                    });
+                }
+            });
+
+            return chain;
+        })
+        .then(function() {
+            return load(prismBase + 'plugins/line-numbers/prism-line-numbers.min.js');
+        })
+        .then(function() {
+            if (window.Prism) {
+                for (var i = 0; i < codes.length; i++) {
+                    Prism.highlightElement(codes[i]);
+                }
+            }
+        })
+        .catch(function(e) {
+            console.error('Nepodařilo se načíst Prism:', e);
+        });
+})();
+` + '<' + `/script>`
+  );
+}
+
+function renderPreviewTabs(tabs) {
+  const host = document.getElementById('previewHost');
+  host.textContent = '';
+
+  const root = host.attachShadow
+    ? (host.shadowRoot || host.attachShadow({ mode: 'open' }))
+    : host;
+
+  while (root.firstChild) {
+    root.removeChild(root.firstChild);
+  }
+
+  const style = document.createElement('style');
+  style.textContent =
+    '.card{background:#111827;border:1px solid #1f2937;border-radius:12px;overflow:hidden}' +
+    '.head{display:flex;gap:8px;align-items:center;justify-content:space-between;font:600 14px system-ui;background:#0b1220;color:#d1d5db;padding:10px 12px;border-bottom:1px solid #1f2937}' +
+    '.switch{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}' +
+    '.btn{border:1px solid #2a3754;background:#1a2440;color:#d7def0;padding:6px 10px;border-radius:10px;font:600 12px/1 system-ui;cursor:pointer}' +
+    '.btn.active{background:#223257;border-color:#334873;color:#fff}' +
+    'pre{margin:0;padding:12px;color:#e5e7eb;background:#0b1220;white-space:pre;overflow:auto;max-height:360px}' +
+    'code{font-family:Consolas,Monaco,"Courier New",monospace;font-size:13px;line-height:1.5}';
+
+  root.appendChild(style);
+
+  const card = document.createElement('div');
+  card.className = 'card';
+
+  const head = document.createElement('div');
+  head.className = 'head';
+
+  const title = document.createElement('div');
+  title.textContent = 'Kód (náhled)';
+
+  const sw = document.createElement('div');
+  sw.className = 'switch';
+
+  const pres = [];
+  const buttons = [];
+  let active = 0;
+
+  tabs.forEach((tab, index) => {
+    const btn = document.createElement('button');
+    btn.className = index === 0 ? 'btn active' : 'btn';
+    btn.type = 'button';
+    btn.textContent = tab.title || `Okno ${index + 1}`;
+
+    const pre = document.createElement('pre');
+    pre.style.display = index === 0 ? '' : 'none';
+
+    const code = document.createElement('code');
+    code.textContent = tab.code || '';
+
+    pre.appendChild(code);
+
+    btn.onclick = () => {
+      active = index;
+
+      pres.forEach((p, i) => {
+        p.style.display = i === index ? '' : 'none';
+      });
+
+      buttons.forEach((b, i) => {
+        b.classList.toggle('active', i === index);
+      });
+    };
+
+    sw.appendChild(btn);
+    buttons.push(btn);
+    pres.push(pre);
+  });
+
+  const copy = document.createElement('button');
+  copy.className = 'btn';
+  copy.type = 'button';
+  copy.textContent = '📋 Zkopírovat';
+
+  copy.onclick = () => {
+    const tab = tabs[active];
+    navigator.clipboard.writeText(tab ? tab.code : '').catch(() => {});
+  };
+
+  sw.appendChild(copy);
+
+  head.append(title, sw);
+  card.appendChild(head);
+
+  pres.forEach(pre => {
+    card.appendChild(pre);
+  });
+
+  root.appendChild(card);
+
+  host._getPreviewText = function() {
+    const tab = tabs[active];
+    return tab ? tab.code : '';
+  };
+}
+
+const windowsWrap = document.getElementById('windows');
+
+const languagePresets = [
+  { title: 'HTML', language: 'markup', component: 'markup' },
+  { title: 'CSS', language: 'css', component: 'css' },
+  { title: 'JS', language: 'javascript', component: 'javascript' },
+  { title: 'C#', language: 'csharp', component: 'csharp' },
+  { title: 'Blazor / Razor', language: 'cshtml', component: 'cshtml' },
+  { title: 'Laravel / PHP', language: 'php', component: 'php' },
+  { title: 'Blade', language: 'php', component: 'php' },
+  { title: 'JSON', language: 'json', component: 'json' },
+  { title: 'SQL', language: 'sql', component: 'sql' },
+  { title: 'Bash', language: 'bash', component: 'bash' }
+];
+
+function addCodeWindow(data = {}) {
+  const row = document.createElement('div');
+  row.className = 'code-window';
+
+  const head = document.createElement('div');
+  head.className = 'code-window-head';
+
+  const titleInput = document.createElement('input');
+  titleInput.type = 'text';
+  titleInput.placeholder = 'Název okna';
+  titleInput.value = data.title || 'HTML';
+
+  const select = document.createElement('select');
+
+  languagePresets.forEach(preset => {
+    const option = document.createElement('option');
+    option.value = preset.language;
+    option.dataset.component = preset.component;
+    option.textContent = preset.title;
+
+    if (
+      (data.language || 'markup') === preset.language &&
+      (data.component || 'markup') === preset.component
+    ) {
+      option.selected = true;
+    }
+
+    select.appendChild(option);
+  });
+
+  const remove = document.createElement('button');
+  remove.type = 'button';
+  remove.className = 'secondary';
+  remove.textContent = 'Smazat';
+
+  const textarea = document.createElement('textarea');
+  textarea.placeholder = 'Sem vlož kód...';
+  textarea.value = data.code || '';
+
+  select.addEventListener('change', function() {
+    const selected = select.options[select.selectedIndex];
+    titleInput.value = selected.textContent;
+  });
+
+  remove.addEventListener('click', function() {
+    row.remove();
+  });
+
+  head.append(titleInput, select, remove);
+  row.append(head, textarea);
+  windowsWrap.appendChild(row);
+}
+
+function collectTabs() {
+  const rows = Array.from(windowsWrap.querySelectorAll('.code-window'));
+
+  return rows.map(row => {
+    const titleInput = row.querySelector('input');
+    const select = row.querySelector('select');
+    const textarea = row.querySelector('textarea');
+    const selected = select.options[select.selectedIndex];
+
+    return {
+      title: titleInput.value.trim() || selected.textContent,
+      language: select.value,
+      component: selected.dataset.component || select.value,
+      code: textarea.value
+    };
+  }).filter(tab => tab.code.trim() !== '');
+}
+
+document.getElementById('addWindowBtn').addEventListener('click', function() {
+  addCodeWindow({
+    title: 'HTML',
+    language: 'markup',
+    component: 'markup',
+    code: ''
+  });
+});
+
+const out = document.getElementById('outCode');
+const idTag = document.getElementById('idTag');
+
+let currentId = uid();
+idTag.textContent = 'id: #' + currentId;
+
+document.getElementById('copyBtn').addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(out.textContent);
+    document.getElementById('copyState').textContent = 'Zkopírováno ✅';
+  } catch (e) {
+    document.getElementById('copyState').textContent = 'Kopírování selhalo';
+  }
+});
+
+document.getElementById('generateBtn').addEventListener('click', function() {
+  const tabs = collectTabs();
+
+  if (!tabs.length) {
+    out.textContent = 'Nejdřív přidej alespoň jedno okno s kódem.';
+    return;
+  }
+
+  const code = buildSnippet({
+    tabs: tabs,
+    id: currentId
+  });
+
+  out.textContent = code;
+  renderPreviewTabs(tabs);
+
+  currentId = uid();
+  idTag.textContent = 'id: #' + currentId;
+  document.getElementById('copyState').textContent = '';
+});
+
+document.getElementById('copyPreviewBtn').addEventListener('click', async () => {
+  const host = document.getElementById('previewHost');
+
+  try {
+    const text = typeof host._getPreviewText === 'function'
+      ? host._getPreviewText()
+      : '';
+
+    await navigator.clipboard.writeText(text);
+    document.getElementById('copyState').textContent = 'Náhled zkopírován ✅';
+  } catch (e) {
+    document.getElementById('copyState').textContent = 'Kopírování selhalo';
+  }
+});
+
+function codeLines() {
+  return Array.from(arguments).join('\n');
+}
+
+addCodeWindow({
+  title: 'HTML',
+  language: 'markup',
+  component: 'markup',
+  code: codeLines(
+    '<!-- HTML ukázka -->',
+    '<div class="box">Ahoj světe</div>'
+  )
+});
+
+addCodeWindow({
+  title: 'CSS',
+  language: 'css',
+  component: 'css',
+  code: codeLines(
+    '/* CSS ukázka */',
+    '.box {',
+    '    padding: 12px;',
+    '    background: #111827;',
+    '    color: #e6edf7;',
+    '    border-radius: 8px;',
+    '}'
+  )
+});
+
+addCodeWindow({
+  title: 'JS',
+  language: 'javascript',
+  component: 'javascript',
+  code: codeLines(
+    '// JS ukázka',
+    'console.log("Hello from JS");'
+  )
+});
+
+addCodeWindow({
+  title: 'C#',
+  language: 'csharp',
+  component: 'csharp',
+  code: codeLines(
+    'public class Person',
+    '{',
+    '    public string Name { get; set; }',
+    '}'
+  )
+});
+
+addCodeWindow({
+  title: 'Blazor',
+  language: 'cshtml',
+  component: 'cshtml',
+  code: codeLines(
+    '<h3>@Title</h3>',
+    '',
+    '<button @onclick="Increment">Klikni</button>',
+    '',
+    '<p>Počet kliknutí: @count</p>',
+    '',
+    '@code {',
+    '    private string Title = "Ahoj Blazor";',
+    '    private int count = 0;',
+    '',
+    '    private void Increment()',
+    '    {',
+    '        count++;',
+    '    }',
+    '}'
+  )
+});
+
+addCodeWindow({
+  title: 'Laravel',
+  language: 'php',
+  component: 'php',
+  code: codeLines(
+    '<' + '?php',
+    '',
+    'use Illuminate\\Support\\Facades\\Route;',
+    '',
+    "Route::get('/hello', function () {",
+    "    return view('hello');",
+    '});'
+  )
+});
+
+
+</script>
+</body>
+</html>
